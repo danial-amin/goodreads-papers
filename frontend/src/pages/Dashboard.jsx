@@ -8,7 +8,9 @@ import {
   Lightbulb, Sparkles, Brain, Eye, GraduationCap, Code, Quote
 } from 'lucide-react'
 import { useUser } from '../context/UserContext'
+import { interactionsAPI } from '../services/api'
 import api from '../services/api'
+import PaperCard from '../components/PaperCard'
 
 // Understanding level icons and colors
 const UNDERSTANDING_CONFIG = {
@@ -28,6 +30,7 @@ const Dashboard = () => {
   const [habits, setHabits] = useState(null)
   const [exploreExploit, setExploreExploit] = useState(null)
   const [domainExpertise, setDomainExpertise] = useState(null)
+  const [readPapers, setReadPapers] = useState([])
 
   useEffect(() => {
     if (!currentUser) {
@@ -39,14 +42,16 @@ const Dashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const [habitsRes, exploreRes, domainRes] = await Promise.all([
-        api.get(`/users/${currentUser.id}/reading-habits`),
-        api.get(`/users/${currentUser.id}/explore-exploit`),
-        api.get(`/users/${currentUser.id}/domain-expertise`),
+      const [habitsRes, exploreRes, domainRes, readPapersRes] = await Promise.all([
+        api.get(`/api/users/${currentUser.id}/reading-habits`),
+        api.get(`/api/users/${currentUser.id}/explore-exploit`),
+        api.get(`/api/users/${currentUser.id}/domain-expertise`),
+        interactionsAPI.getReadPapers(currentUser.id, 10),
       ])
       setHabits(habitsRes.data)
       setExploreExploit(exploreRes.data)
       setDomainExpertise(domainRes.data)
+      setReadPapers(readPapersRes.data || [])
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
     } finally {
@@ -428,11 +433,41 @@ const Dashboard = () => {
           </motion.div>
         </div>
 
+        {/* Recently Read Papers */}
+        {readPapers.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.9 }}
+            className="mt-6 bg-slate-800/50 backdrop-blur-xl rounded-2xl border border-slate-700/50 p-6"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-green-400" />
+                Recently Read Papers
+              </h2>
+              <Link
+                to="/papers"
+                className="text-sm text-blue-400 hover:text-blue-300 flex items-center gap-1"
+              >
+                View All
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {readPapers.slice(0, 6).map((item, index) => (
+                <PaperCard key={item.paper.id} paper={item.paper} delay={index * 0.1} />
+              ))}
+            </div>
+          </motion.div>
+        )}
+
         {/* Insights & Quick Actions */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.9 }}
+          transition={{ delay: 1.0 }}
           className="mt-6 bg-slate-800/50 backdrop-blur-xl rounded-2xl border border-slate-700/50 p-6"
         >
           <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">

@@ -7,7 +7,7 @@ import {
   TrendingUp, Search, Layers
 } from 'lucide-react'
 import { useUser } from '../context/UserContext'
-import api from '../services/api'
+import { onboardingAPI } from '../services/api'
 
 const USER_TYPES = [
   {
@@ -128,7 +128,7 @@ const Onboarding = () => {
   const handleSubmit = async () => {
     setLoading(true)
     try {
-      const response = await api.post('/onboarding/complete', formData)
+      const response = await onboardingAPI.complete(formData)
       setCurrentUser(response.data.user)
       navigate('/dashboard')
     } catch (error) {

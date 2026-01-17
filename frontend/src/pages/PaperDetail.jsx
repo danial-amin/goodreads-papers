@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { papersAPI, interactionsAPI } from '../services/api'
 import { useUser } from '../context/UserContext'
 import PaperCard from '../components/PaperCard'
+import PaperReflectionModal from '../components/PaperReflectionModal'
 import {
   Calendar,
   Users,
@@ -22,6 +23,8 @@ const PaperDetail = () => {
   const [loading, setLoading] = useState(true)
   const [rating, setRating] = useState(0)
   const [status, setStatus] = useState('want_to_read')
+  const [showReflectionModal, setShowReflectionModal] = useState(false)
+  const [pendingStatus, setPendingStatus] = useState(null)
 
   useEffect(() => {
     fetchPaper()
@@ -49,7 +52,40 @@ const PaperDetail = () => {
     }
   }
 
-  const handleInteraction = async () => {
+  const handleStatusChange = (newStatus) => {
+    setStatus(newStatus)
+    // If marking as read, show reflection modal
+    if (newStatus === 'read') {
+      setPendingStatus(newStatus)
+      setShowReflectionModal(true)
+    } else {
+      // For other statuses, save immediately
+      handleInteraction(newStatus)
+    }
+  }
+
+  const handleReflectionSubmit = async (reflectionData) => {
+    if (!currentUser) return
+    
+    setShowReflectionModal(false)
+    
+    try {
+      await interactionsAPI.create({
+        user_id: currentUser.id,
+        paper_id: parseInt(id),
+        rating: rating > 0 ? rating : null,
+        status: pendingStatus || status,
+        ...reflectionData
+      })
+      alert('Paper marked as read and reflection saved!')
+      setPendingStatus(null)
+    } catch (err) {
+      console.error('Error saving interaction:', err)
+      alert('Failed to save interaction')
+    }
+  }
+
+  const handleInteraction = async (statusToUse = null) => {
     if (!currentUser) return
 
     try {
@@ -57,7 +93,7 @@ const PaperDetail = () => {
         user_id: currentUser.id,
         paper_id: parseInt(id),
         rating: rating > 0 ? rating : null,
-        status: status,
+        status: statusToUse || status,
       })
       alert('Interaction saved!')
     } catch (err) {
@@ -174,7 +210,7 @@ const PaperDetail = () => {
                   </label>
                   <select
                     value={status}
-                    onChange={(e) => setStatus(e.target.value)}
+                    onChange={(e) => handleStatusChange(e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="want_to_read">Want to Read</option>
@@ -204,12 +240,23 @@ const PaperDetail = () => {
                     ))}
                   </div>
                 </div>
-                <button onClick={handleInteraction} className="btn-primary">
+                <button onClick={() => handleInteraction()} className="btn-primary">
                   Save
                 </button>
               </div>
             </div>
           )}
+
+          {/* Reflection Modal */}
+          <PaperReflectionModal
+            isOpen={showReflectionModal}
+            onClose={() => {
+              setShowReflectionModal(false)
+              setPendingStatus(null)
+            }}
+            paper={paper}
+            onSubmit={handleReflectionSubmit}
+          />
         </motion.div>
 
         {/* Similar Papers */}

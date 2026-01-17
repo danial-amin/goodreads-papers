@@ -91,6 +91,10 @@ class UserPaperInteraction(Base):
     rating = Column(Integer)  # 1-5 stars
     status = Column(Enum(InteractionStatus), default=InteractionStatus.WANT_TO_READ)
     notes = Column(Text)
+    # Reflection questions (asked when marking as read)
+    what_is_about = Column(Text)  # What is this paper about?
+    is_relevant = Column(Text)  # Is it relevant to your work?
+    where_can_use = Column(Text)  # Where can you use this paper in your research?
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     

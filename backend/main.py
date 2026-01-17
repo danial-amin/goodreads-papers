@@ -10,7 +10,7 @@ from models import Paper, User, UserPaperInteraction
 from schemas import (
     PaperCreate, PaperResponse, PaperUpdate,
     UserCreate, UserResponse,
-    RecommendationResponse, InteractionCreate,
+    RecommendationResponse, InteractionCreate, InteractionResponse,
     Token, UserLogin,
     ChatRequest, ChatResponse, FetchPapersRequest, BibTeXUploadRequest,
     SignupStep1, SignupStep2, SignupStep3, GuestInteractionCreate,
@@ -55,6 +55,13 @@ try:
     migrate_v2()
 except Exception as e:
     print(f"Migration v2 note: {e}")
+
+# Run v3 migration for reflection questions
+try:
+    from migrate_v3 import migrate_v3
+    migrate_v3()
+except Exception as e:
+    print(f"Migration v3 note: {e}")
 
 app = FastAPI(
     title="PaperReads API",
@@ -674,15 +681,23 @@ async def create_interaction(
     if existing:
         existing.rating = interaction.rating
         existing.status = interaction.status
+        if interaction.notes is not None:
+            existing.notes = interaction.notes
+        if interaction.what_is_about is not None:
+            existing.what_is_about = interaction.what_is_about
+        if interaction.is_relevant is not None:
+            existing.is_relevant = interaction.is_relevant
+        if interaction.where_can_use is not None:
+            existing.where_can_use = interaction.where_can_use
         db.commit()
         db.refresh(existing)
-        return {"message": "Interaction updated", "interaction": existing}
+        return {"message": "Interaction updated", "interaction": InteractionResponse.model_validate(existing)}
     
     db_interaction = UserPaperInteraction(**interaction.dict())
     db.add(db_interaction)
     db.commit()
     db.refresh(db_interaction)
-    return {"message": "Interaction created", "interaction": db_interaction}
+    return {"message": "Interaction created", "interaction": InteractionResponse.model_validate(db_interaction)}
 
 @app.post("/api/guest/interactions", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_guest_interaction(
@@ -713,6 +728,30 @@ async def get_user_interactions(user_id: int, db: Session = Depends(get_db)):
         UserPaperInteraction.user_id == user_id
     ).all()
     return interactions
+
+@app.get("/api/users/{user_id}/read-papers")
+async def get_read_papers(
+    user_id: int,
+    limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    """Get papers that the user has read"""
+    interactions = db.query(UserPaperInteraction).filter(
+        UserPaperInteraction.user_id == user_id,
+        UserPaperInteraction.status == InteractionStatus.READ
+    ).order_by(UserPaperInteraction.updated_at.desc()).limit(limit).all()
+    
+    read_papers = []
+    for interaction in interactions:
+        paper = db.query(Paper).filter(Paper.id == interaction.paper_id).first()
+        if paper:
+            read_papers.append({
+                "paper": PaperResponse.model_validate(paper),
+                "interaction": InteractionResponse.model_validate(interaction),
+                "read_at": interaction.updated_at or interaction.created_at
+            })
+    
+    return read_papers
 
 # Recommendation endpoints
 @app.get("/api/users/{user_id}/recommendations", response_model=List[RecommendationResponse])

@@ -61,20 +61,38 @@ class RecommendationEngine:
         limit: int = 10
     ) -> List[RecommendationResponse]:
         """Get personalized recommendations for a user"""
+        from models import User
+        
+        # Get user to check preferences
+        user = db.query(User).filter(User.id == user_id).first()
+        
         # Build vectors if not already built
         if self.paper_vectors is None or self.paper_ids is None:
             self._build_paper_vectors(db)
         
         if self.paper_vectors is None or self.paper_ids is None:
-            # If no papers, return empty or popular papers
-            papers = db.query(Paper).order_by(
-                Paper.citation_count.desc()
-            ).limit(limit).all()
+            # If no papers, return papers matching user preferences or popular papers
+            query = db.query(Paper)
+            
+            # Filter by preferred domains if user has them
+            if user and user.preferred_domains:
+                domains = [d.strip() for d in user.preferred_domains.split(',')]
+                from sqlalchemy import or_
+                domain_filters = [Paper.domains.contains(domain) for domain in domains]
+                if domain_filters:
+                    query = query.filter(or_(*domain_filters))
+            
+            papers = query.order_by(Paper.citation_count.desc()).limit(limit).all()
+            
+            if not papers:
+                # Fallback to any popular papers
+                papers = db.query(Paper).order_by(Paper.citation_count.desc()).limit(limit).all()
+            
             return [
                 RecommendationResponse(
                     paper=PaperResponse.model_validate(p),
                     score=0.0,
-                    reason="Popular paper"
+                    reason="Popular paper" + (" in your preferred domains" if user and user.preferred_domains else "")
                 )
                 for p in papers
             ]
@@ -85,15 +103,28 @@ class RecommendationEngine:
         ).all()
         
         if not interactions:
-            # If no interactions, return popular papers
-            papers = db.query(Paper).order_by(
-                Paper.citation_count.desc()
-            ).limit(limit).all()
+            # If no interactions, return papers matching user preferences
+            query = db.query(Paper)
+            
+            # Filter by preferred domains if user has them
+            if user and user.preferred_domains:
+                domains = [d.strip() for d in user.preferred_domains.split(',')]
+                from sqlalchemy import or_
+                domain_filters = [Paper.domains.contains(domain) for domain in domains]
+                if domain_filters:
+                    query = query.filter(or_(*domain_filters))
+            
+            papers = query.order_by(Paper.citation_count.desc()).limit(limit).all()
+            
+            if not papers:
+                # Fallback to any popular papers
+                papers = db.query(Paper).order_by(Paper.citation_count.desc()).limit(limit).all()
+            
             return [
                 RecommendationResponse(
                     paper=PaperResponse.model_validate(p),
                     score=0.0,
-                    reason="Popular paper"
+                    reason="Popular paper" + (" in your preferred domains" if user and user.preferred_domains else "")
                 )
                 for p in papers
             ]
@@ -110,10 +141,12 @@ class RecommendationEngine:
                 
                 # Weight by rating if available
                 weight = interaction.rating if interaction.rating else 1.0
-                if interaction.status == InteractionStatus.FAVORITE:
+                if interaction.status == InteractionStatus.STUDIED:
                     weight *= 2.0
                 elif interaction.status == InteractionStatus.READ:
                     weight *= 1.5
+                elif interaction.status == InteractionStatus.IMPLEMENTED or interaction.status == InteractionStatus.CITED:
+                    weight *= 2.5
                 
                 if user_vector is None:
                     user_vector = paper_vector * weight
@@ -136,6 +169,25 @@ class RecommendationEngine:
         for idx, paper_id in enumerate(self.paper_ids):
             if paper_id not in interacted_paper_ids:
                 score = float(similarities[idx])
+                
+                # Boost score if paper matches user's preferred domains or research interests
+                paper = db.query(Paper).filter(Paper.id == paper_id).first()
+                if paper and user:
+                    # Check preferred domains
+                    if user.preferred_domains and paper.domains:
+                        user_domains = [d.strip().lower() for d in user.preferred_domains.split(',')]
+                        paper_domains = [d.strip().lower() for d in paper.domains.split(',')]
+                        if any(domain in paper_domains for domain in user_domains):
+                            score *= 1.3  # Boost by 30%
+                    
+                    # Check research interests (simple keyword matching)
+                    if user.research_interests and paper.keywords:
+                        user_interests = user.research_interests.lower()
+                        paper_keywords = paper.keywords.lower()
+                        # Check if any keywords from paper match user interests
+                        if any(keyword in user_interests for keyword in paper_keywords.split(',') if len(keyword.strip()) > 3):
+                            score *= 1.2  # Boost by 20%
+                
                 recommendations.append((paper_id, score))
         
         # Sort by score and get top N
@@ -152,6 +204,13 @@ class RecommendationEngine:
                     reason = "Highly relevant to your interests"
                 elif score > 0.1:
                     reason = "Related to your reading history"
+                
+                # Add domain match info if applicable
+                if user and user.preferred_domains and paper.domains:
+                    user_domains = [d.strip().lower() for d in user.preferred_domains.split(',')]
+                    paper_domains = [d.strip().lower() for d in paper.domains.split(',')]
+                    if any(domain in paper_domains for domain in user_domains):
+                        reason += " (matches your preferred domains)"
                 
                 result.append(
                     RecommendationResponse(

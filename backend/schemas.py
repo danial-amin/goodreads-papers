@@ -127,6 +127,25 @@ class InteractionCreate(BaseModel):
     rating: Optional[int] = None
     status: Optional[InteractionStatus] = InteractionStatus.WANT_TO_READ
     notes: Optional[str] = None
+    what_is_about: Optional[str] = None  # Reflection question 1
+    is_relevant: Optional[str] = None  # Reflection question 2
+    where_can_use: Optional[str] = None  # Reflection question 3
+
+class InteractionResponse(BaseModel):
+    id: int
+    user_id: int
+    paper_id: int
+    rating: Optional[int] = None
+    status: InteractionStatus
+    notes: Optional[str] = None
+    what_is_about: Optional[str] = None
+    is_relevant: Optional[str] = None
+    where_can_use: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
 
 class RecommendationResponse(BaseModel):
     paper: PaperResponse

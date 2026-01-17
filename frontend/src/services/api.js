@@ -38,6 +38,7 @@ export const recommendationsAPI = {
 export const interactionsAPI = {
   create: (data) => api.post('/api/interactions', data),
   getUserInteractions: (userId) => api.get(`/api/users/${userId}/interactions`),
+  getReadPapers: (userId, limit = 20) => api.get(`/api/users/${userId}/read-papers`, { params: { limit } }),
 }
 
 export const chatAPI = {

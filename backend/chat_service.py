@@ -116,7 +116,7 @@ Respond in a friendly, conversational way. Focus on how the papers relate to wha
                     filtered_recs = filtered_recs[:limit]
                 
                 return {
-                    "response": explanation,
+                    "message": explanation,
                     "recommendations": [
                         {
                             "paper": {
@@ -127,7 +127,11 @@ Respond in a friendly, conversational way. Focus on how the papers relate to wha
                                 "venue": r.paper.venue,
                                 "year": r.paper.year,
                                 "url": r.paper.url,
-                                "keywords": r.paper.keywords
+                                "keywords": r.paper.keywords,
+                                "citation_count": r.paper.citation_count or 0,
+                                "created_at": r.paper.created_at,
+                                "smart_tags": r.paper.smart_tags,
+                                "domains": r.paper.domains
                             },
                             "score": r.score,
                             "reason": r.reason
@@ -157,7 +161,7 @@ Respond in a friendly, conversational way. Focus on how the papers relate to wha
         explanation = f"Based on your query '{message}', I found {len(top_recs)} relevant papers that match your interests."
         
         return {
-            "response": explanation,
+            "message": explanation,
             "recommendations": [
                 {
                     "paper": {
@@ -168,7 +172,11 @@ Respond in a friendly, conversational way. Focus on how the papers relate to wha
                         "venue": r.paper.venue,
                         "year": r.paper.year,
                         "url": r.paper.url,
-                        "keywords": r.paper.keywords
+                        "keywords": r.paper.keywords,
+                        "citation_count": r.paper.citation_count or 0,
+                        "created_at": r.paper.created_at,
+                        "smart_tags": r.paper.smart_tags,
+                        "domains": r.paper.domains
                     },
                     "score": r.score,
                     "reason": r.reason
