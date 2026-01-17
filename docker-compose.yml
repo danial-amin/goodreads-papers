@@ -1,0 +1,42 @@
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: paperreads-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - backend-data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:///./data/paperreads.db
+    restart: unless-stopped
+    networks:
+      - paperreads-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: paperreads-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - paperreads-network
+
+volumes:
+  backend-data:
+
+networks:
+  paperreads-network:
+    driver: bridge
