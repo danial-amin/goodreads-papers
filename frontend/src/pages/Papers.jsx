@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import PaperCard from '../components/PaperCard'
 import { papersAPI } from '../services/api'
-import { Search, Loader2, Download, Upload, X } from 'lucide-react'
+import { Search, Loader2, Download, Upload, X, BookOpen } from 'lucide-react'
 
 const Papers = () => {
   const [papers, setPapers] = useState([])
@@ -45,7 +45,6 @@ const Papers = () => {
         sources: ["arxiv"],
         max_per_source: 20
       })
-      // Refresh papers list
       await fetchPapers()
       alert(`Fetched ${response.data.length} new papers from arXiv!`)
     } catch (err) {
@@ -90,49 +89,58 @@ const Papers = () => {
   }
 
   return (
-    <div className="min-h-screen py-8 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 py-8 px-4">
       <div className="max-w-7xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">Browse Papers</h1>
-          <p className="text-gray-600 mb-6">
-            Discover research papers from various fields
-          </p>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-3 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl">
+              <BookOpen className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-white">Browse Papers</h1>
+              <p className="text-slate-400">Discover research papers from various fields</p>
+            </div>
+          </div>
 
-          {/* Search Bar and Fetch Button */}
-          <div className="flex flex-wrap gap-4 mb-8">
+          {/* Search Bar and Actions */}
+          <div className="flex flex-wrap gap-4 mb-6">
             <form onSubmit={handleSearch} className="flex-1 min-w-[300px]">
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500 w-5 h-5" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search papers by title, authors, or keywords..."
-                  className="w-full pl-12 pr-4 py-4 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none transition-colors"
+                  className="w-full pl-12 pr-28 py-4 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none transition-colors"
                 />
                 <button
                   type="submit"
-                  className="absolute right-2 top-1/2 transform -translate-y-1/2 btn-primary py-2 px-6"
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-lg text-white font-medium hover:shadow-lg hover:shadow-blue-500/25 transition-all"
                 >
                   Search
                 </button>
               </div>
             </form>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-3">
             <button
               onClick={handleFetchExternal}
               disabled={fetching}
-              className="btn-secondary flex items-center space-x-2 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-300 hover:text-white hover:bg-slate-700 transition-all disabled:opacity-50"
             >
-              <Download className="w-5 h-5" />
-              <span>{fetching ? 'Fetching...' : 'Fetch New Papers'}</span>
+              <Download className="w-4 h-4" />
+              <span>{fetching ? 'Fetching...' : 'Fetch from arXiv'}</span>
             </button>
-            <label className="btn-secondary flex items-center space-x-2 cursor-pointer">
-              <Upload className="w-5 h-5" />
-              <span>Upload BibTeX</span>
+            <label className="flex items-center gap-2 px-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-300 hover:text-white hover:bg-slate-700 transition-all cursor-pointer">
+              <Upload className="w-4 h-4" />
+              <span>Upload BibTeX File</span>
               <input
                 type="file"
                 accept=".bib,.txt"
@@ -142,9 +150,9 @@ const Papers = () => {
             </label>
             <button
               onClick={() => setShowBibTeXUpload(!showBibTeXUpload)}
-              className="btn-secondary flex items-center space-x-2"
+              className="flex items-center gap-2 px-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-slate-300 hover:text-white hover:bg-slate-700 transition-all"
             >
-              <Upload className="w-5 h-5" />
+              <Upload className="w-4 h-4" />
               <span>Paste BibTeX</span>
             </button>
           </div>
@@ -154,16 +162,16 @@ const Papers = () => {
             <motion.div
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="card p-6 mb-6"
+              className="mt-6 bg-slate-800/50 backdrop-blur-xl rounded-2xl border border-slate-700/50 p-6"
             >
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-gray-900">Upload BibTeX</h3>
+                <h3 className="text-xl font-bold text-white">Upload BibTeX</h3>
                 <button
                   onClick={() => {
                     setShowBibTeXUpload(false)
                     setBibtexContent('')
                   }}
-                  className="text-gray-500 hover:text-gray-700"
+                  className="text-slate-400 hover:text-white transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -172,22 +180,22 @@ const Papers = () => {
                 value={bibtexContent}
                 onChange={(e) => setBibtexContent(e.target.value)}
                 placeholder="Paste your BibTeX content here...&#10;&#10;Example:&#10;@article{example,&#10;  title={Example Paper},&#10;  author={John Doe},&#10;  journal={Example Journal},&#10;  year={2024}&#10;}"
-                className="w-full h-64 p-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none font-mono text-sm"
+                className="w-full h-64 p-4 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none font-mono text-sm resize-none"
               />
-              <div className="flex justify-end space-x-2 mt-4">
+              <div className="flex justify-end gap-3 mt-4">
                 <button
                   onClick={() => {
                     setShowBibTeXUpload(false)
                     setBibtexContent('')
                   }}
-                  className="btn-secondary"
+                  className="px-4 py-2 bg-slate-700 rounded-xl text-slate-300 hover:text-white transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleBibTeXUpload}
                   disabled={uploading || !bibtexContent.trim()}
-                  className="btn-primary disabled:opacity-50"
+                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl text-white font-medium hover:shadow-lg hover:shadow-blue-500/25 transition-all disabled:opacity-50"
                 >
                   {uploading ? 'Uploading...' : 'Upload'}
                 </button>
@@ -199,13 +207,16 @@ const Papers = () => {
         {/* Loading State */}
         {loading && (
           <div className="flex justify-center items-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            <div className="text-center">
+              <Loader2 className="w-10 h-10 animate-spin text-blue-500 mx-auto mb-4" />
+              <p className="text-slate-400">Loading papers...</p>
+            </div>
           </div>
         )}
 
         {/* Error State */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+          <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl mb-6">
             {error}
           </div>
         )}
@@ -215,16 +226,23 @@ const Papers = () => {
           <>
             {papers.length === 0 ? (
               <div className="text-center py-20">
-                <p className="text-gray-600 text-lg">
+                <BookOpen className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                <p className="text-slate-400 text-lg">
                   {searchQuery ? 'No papers found matching your search.' : 'No papers available yet.'}
+                </p>
+                <p className="text-slate-500 text-sm mt-2">
+                  Try fetching papers from arXiv or uploading a BibTeX file.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {papers.map((paper, index) => (
-                  <PaperCard key={paper.id} paper={paper} delay={index * 0.1} />
-                ))}
-              </div>
+              <>
+                <p className="text-slate-400 mb-4">{papers.length} papers found</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {papers.map((paper, index) => (
+                    <PaperCard key={paper.id} paper={paper} delay={index * 0.05} />
+                  ))}
+                </div>
+              </>
             )}
           </>
         )}

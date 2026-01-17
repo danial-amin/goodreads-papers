@@ -14,8 +14,11 @@ from schemas import (
     Token, UserLogin,
     ChatRequest, ChatResponse, FetchPapersRequest, BibTeXUploadRequest,
     SignupStep1, SignupStep2, SignupStep3, GuestInteractionCreate,
-    PaperURLUpdate
+    PaperURLUpdate,
+    OnboardingData, OnboardingResponse,
+    ReadingHabitsResponse, ExploreExploitResponse, DomainExpertiseResponse
 )
+from models import InteractionStatus
 from recommendation_engine import RecommendationEngine
 from paper_fetchers import PaperFetcherService, ArxivFetcher, PubMedFetcher
 from chat_service import ChatService
@@ -25,6 +28,8 @@ from reading_patterns import ReadingPatternAnalyzer
 from semantic_search import semantic_search_engine
 from auto_fetch import auto_fetcher
 from guest_session import GuestSessionManager
+from reading_habits import ReadingHabitsTracker
+from explore_exploit_advisor import ExploreExploitAdvisor
 from auth import (
     get_password_hash, verify_password, create_access_token,
     verify_token, authenticate_user, get_user_by_username
@@ -43,6 +48,13 @@ try:
     migrate_database()
 except Exception as e:
     print(f"Migration note: {e}")
+
+# Run v2 migration for onboarding and habits features
+try:
+    from migrate_v2 import migrate_v2
+    migrate_v2()
+except Exception as e:
+    print(f"Migration v2 note: {e}")
 
 app = FastAPI(
     title="PaperReads API",
@@ -875,6 +887,221 @@ async def chat_recommendations(
         raise HTTPException(status_code=404, detail=result["error"])
     
     return ChatResponse(**result)
+
+# ============================================
+# ONBOARDING ENDPOINTS
+# ============================================
+
+@app.post("/api/onboarding/complete", response_model=OnboardingResponse)
+async def complete_onboarding(
+    data: OnboardingData,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Complete user onboarding with preferences"""
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Update user with onboarding data
+    user.user_type = data.user_type
+    user.primary_goal = data.primary_goal
+    user.weekly_paper_goal = data.weekly_paper_goal
+    user.experience_level = data.experience_level
+    user.onboarding_completed = True
+
+    if data.research_interests:
+        user.research_interests = data.research_interests
+    if data.preferred_domains:
+        user.preferred_domains = ", ".join(data.preferred_domains)
+
+    db.commit()
+    db.refresh(user)
+
+    return OnboardingResponse(
+        user=UserResponse.model_validate(user),
+        message="Onboarding completed successfully!",
+        suggested_papers_count=10
+    )
+
+
+@app.get("/api/onboarding/status")
+async def get_onboarding_status(
+    current_user: User = Depends(get_current_user)
+):
+    """Check if user has completed onboarding"""
+    return {
+        "onboarding_completed": current_user.onboarding_completed or False,
+        "user_type": current_user.user_type.value if current_user.user_type else None,
+        "primary_goal": current_user.primary_goal.value if current_user.primary_goal else None,
+    }
+
+
+# ============================================
+# READING HABITS ENDPOINTS
+# ============================================
+
+@app.get("/api/users/{user_id}/reading-habits", response_model=ReadingHabitsResponse)
+async def get_reading_habits(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get user's reading habits and streak data"""
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    habits = ReadingHabitsTracker.get_reading_habits(user_id, db)
+    return ReadingHabitsResponse(**habits)
+
+
+@app.put("/api/users/{user_id}/weekly-goal")
+async def update_weekly_goal(
+    user_id: int,
+    weekly_goal: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Update user's weekly paper reading goal"""
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    result = ReadingHabitsTracker.update_weekly_goal(user_id, weekly_goal, db)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+# ============================================
+# EXPLORE/EXPLOIT ADVISOR ENDPOINTS
+# ============================================
+
+@app.get("/api/users/{user_id}/explore-exploit", response_model=ExploreExploitResponse)
+async def get_explore_exploit_analysis(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get explore/exploit analysis and recommendations"""
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    analysis = ExploreExploitAdvisor.analyze_user(user_id, db)
+    return ExploreExploitResponse(**analysis)
+
+
+@app.get("/api/users/{user_id}/domain-expertise", response_model=DomainExpertiseResponse)
+async def get_domain_expertise(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get domain expertise radar data"""
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    analysis = ExploreExploitAdvisor.analyze_user(user_id, db)
+
+    # Transform for radar chart
+    domains = analysis.get("domain_expertise", [])
+    max_papers = max((d["papers"] for d in domains), default=1)
+
+    radar_domains = []
+    for d in domains[:8]:  # Max 8 domains for radar
+        radar_domains.append({
+            "name": d["domain"],
+            "value": round(d["papers"] / max_papers, 2) if max_papers > 0 else 0,
+            "papers_count": d["papers"],
+            "depth": d["depth"],
+        })
+
+    # Determine expertise level
+    total_papers = sum(d["papers"] for d in domains)
+    avg_depth = sum(d["depth"] for d in domains) / len(domains) if domains else 0
+
+    if total_papers >= 50 and avg_depth >= 0.6:
+        expertise_level = "expert"
+    elif total_papers >= 20 and avg_depth >= 0.4:
+        expertise_level = "proficient"
+    elif total_papers >= 5:
+        expertise_level = "developing"
+    else:
+        expertise_level = "novice"
+
+    # Identify strong and growth areas
+    strong_areas = [d["domain"] for d in domains if d["depth"] >= 0.6][:3]
+    growth_areas = [d["domain"] for d in domains if d["depth"] < 0.4 and d["papers"] >= 2][:3]
+
+    return DomainExpertiseResponse(
+        domains=radar_domains,
+        total_domains=len(domains),
+        expertise_level=expertise_level,
+        growth_areas=growth_areas,
+        strong_areas=strong_areas,
+    )
+
+
+# ============================================
+# UNDERSTANDING LEVELS ENDPOINT
+# ============================================
+
+@app.get("/api/understanding-levels")
+async def get_understanding_levels():
+    """Get all available understanding levels with descriptions"""
+    return {
+        "levels": [
+            {
+                "value": "want_to_read",
+                "label": "Want to Read",
+                "description": "Queued for future reading",
+                "icon": "bookmark",
+                "color": "gray"
+            },
+            {
+                "value": "skimmed",
+                "label": "Skimmed",
+                "description": "Glanced at, got the gist",
+                "icon": "eye",
+                "color": "yellow"
+            },
+            {
+                "value": "reading",
+                "label": "Reading",
+                "description": "Currently working through",
+                "icon": "book-open",
+                "color": "blue"
+            },
+            {
+                "value": "read",
+                "label": "Read",
+                "description": "Understood main contribution",
+                "icon": "check",
+                "color": "green"
+            },
+            {
+                "value": "studied",
+                "label": "Studied",
+                "description": "Deep understanding, could explain to others",
+                "icon": "graduation-cap",
+                "color": "purple"
+            },
+            {
+                "value": "implemented",
+                "label": "Implemented",
+                "description": "Built on or reproduced the work",
+                "icon": "code",
+                "color": "indigo"
+            },
+            {
+                "value": "cited",
+                "label": "Cited",
+                "description": "Used in own publications",
+                "icon": "quote",
+                "color": "pink"
+            }
+        ]
+    }
+
 
 if __name__ == "__main__":
     import uvicorn

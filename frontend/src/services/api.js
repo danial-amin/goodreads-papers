@@ -44,4 +44,24 @@ export const chatAPI = {
   getRecommendations: (data) => api.post('/api/chat/recommendations', data),
 }
 
+export const onboardingAPI = {
+  complete: (data) => api.post('/api/onboarding/complete', data),
+  getStatus: () => api.get('/api/onboarding/status'),
+}
+
+export const habitsAPI = {
+  getReadingHabits: (userId) => api.get(`/api/users/${userId}/reading-habits`),
+  updateWeeklyGoal: (userId, weeklyGoal) =>
+    api.put(`/api/users/${userId}/weekly-goal`, null, { params: { weekly_goal: weeklyGoal } }),
+}
+
+export const exploreExploitAPI = {
+  getAnalysis: (userId) => api.get(`/api/users/${userId}/explore-exploit`),
+  getDomainExpertise: (userId) => api.get(`/api/users/${userId}/domain-expertise`),
+}
+
+export const understandingAPI = {
+  getLevels: () => api.get('/api/understanding-levels'),
+}
+
 export default api
