@@ -10,25 +10,38 @@ from nltk.tokenize import word_tokenize
 from nltk.tag import pos_tag
 from nltk.chunk import ne_chunk
 
+# Download NLTK data if not already present (with error handling)
 try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
-    nltk.download('punkt', quiet=True)
+    try:
+        nltk.download('punkt', quiet=True)
+    except Exception as e:
+        print(f"Warning: Could not download NLTK punkt: {e}")
 
 try:
     nltk.data.find('taggers/averaged_perceptron_tagger')
 except LookupError:
-    nltk.download('averaged_perceptron_tagger', quiet=True)
+    try:
+        nltk.download('averaged_perceptron_tagger', quiet=True)
+    except Exception as e:
+        print(f"Warning: Could not download NLTK tagger: {e}")
 
 try:
     nltk.data.find('chunkers/maxent_ne_chunker')
 except LookupError:
-    nltk.download('maxent_ne_chunker', quiet=True)
+    try:
+        nltk.download('maxent_ne_chunker', quiet=True)
+    except Exception as e:
+        print(f"Warning: Could not download NLTK chunker: {e}")
 
 try:
     nltk.data.find('corpora/stopwords')
 except LookupError:
-    nltk.download('stopwords', quiet=True)
+    try:
+        nltk.download('stopwords', quiet=True)
+    except Exception as e:
+        print(f"Warning: Could not download NLTK stopwords: {e}")
 
 class SmartTagger:
     """Automatic tagging and keyword extraction"""
@@ -58,8 +71,12 @@ class SmartTagger:
         if not text:
             return []
         
-        # Combine common stopwords
-        stop_words = set(stopwords.words('english'))
+        # Combine common stopwords (with fallback if NLTK data not available)
+        try:
+            stop_words = set(stopwords.words('english'))
+        except LookupError:
+            # Fallback to basic English stopwords if NLTK data not available
+            stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should', 'could', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'what', 'which', 'who', 'when', 'where', 'why', 'how'}
         stop_words.update(['paper', 'propose', 'proposed', 'method', 'approach', 'result', 'show', 'demonstrate'])
         
         # Tokenize and filter

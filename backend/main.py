@@ -261,7 +261,7 @@ async def get_papers(
 @app.get("/api/papers/graph")
 async def get_papers_graph(
     search: Optional[str] = None,
-    limit: int = 50,
+    limit: int = 2000,  # Increased to show thousands of papers
     user_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional)
@@ -320,8 +320,57 @@ async def get_papers_graph(
                     # No preferred domains - show general popular papers
                     query = db.query(Paper).order_by(Paper.citation_count.desc())
         else:
-            # No user logged in - show general trends (popular papers by domain)
-            query = db.query(Paper).order_by(Paper.citation_count.desc())
+            # No user logged in - show best papers from history
+            # Prioritize papers that have been read/studied by users (community engagement)
+            # combined with high citation counts
+            
+            from sqlalchemy import func, case, desc
+            
+            # Get all papers with their engagement scores
+            # Calculate engagement score based on user interactions
+            engagement_subquery = db.query(
+                UserPaperInteraction.paper_id,
+                func.sum(
+                    case(
+                        (UserPaperInteraction.status == InteractionStatus.CITED, 5),
+                        (UserPaperInteraction.status == InteractionStatus.IMPLEMENTED, 4),
+                        (UserPaperInteraction.status == InteractionStatus.STUDIED, 3),
+                        (UserPaperInteraction.status == InteractionStatus.READ, 2),
+                        (UserPaperInteraction.status == InteractionStatus.READING, 1),
+                        else_=0
+                    )
+                ).label('engagement_score')
+            ).group_by(UserPaperInteraction.paper_id).subquery()
+            
+            # Get papers with engagement scores, ordered by combined score
+            papers_with_scores = db.query(
+                Paper.id,
+                Paper,
+                func.coalesce(engagement_subquery.c.engagement_score, 0).label('engagement')
+            ).outerjoin(
+                engagement_subquery, Paper.id == engagement_subquery.c.paper_id
+            ).order_by(
+                # Combined score: engagement (weighted) + normalized citation count
+                (
+                    func.coalesce(engagement_subquery.c.engagement_score, 0) * 10 +
+                    func.coalesce(Paper.citation_count, 0) / 10.0
+                ).desc(),
+                Paper.citation_count.desc()
+            ).limit(limit).all()
+            
+            # Extract paper IDs in order
+            if papers_with_scores:
+                paper_ids = [row[0] for row in papers_with_scores]
+                # Re-query papers in the correct order
+                from sqlalchemy import case as sql_case
+                order_case = sql_case(
+                    {pid: idx for idx, pid in enumerate(paper_ids)},
+                    value=Paper.id
+                )
+                query = db.query(Paper).filter(Paper.id.in_(paper_ids)).order_by(order_case)
+            else:
+                # Fallback: just get papers by citation count
+                query = db.query(Paper).order_by(Paper.citation_count.desc())
         
         if search:
             query = query.filter(
@@ -329,6 +378,8 @@ async def get_papers_graph(
                 (Paper.abstract.contains(search)) |
                 (Paper.authors.contains(search))
             )
+        
+        # Execute query - should return Paper objects directly
         papers = query.limit(limit).all()
         
         # Build graph structure
@@ -354,11 +405,20 @@ async def get_papers_graph(
             paper_map[paper.id] = paper
         
         # Create links based on topic progression (primary) and other criteria
+        # For large datasets, limit link creation to avoid performance issues
+        max_links = min(5000, len(papers) * 10)  # Cap at 5000 links or 10 per paper
+        link_count = 0
+        
         if len(papers) > 0:
             try:
-                # 1. Topic progression paths (PRIMARY - most important)
-                progression_links = topic_progression.create_progression_paths(papers, max_paths_per_paper=4)
-                links.extend(progression_links)
+                # 1. Topic progression paths (PRIMARY - most important) - limit for performance
+                if len(papers) <= 500:
+                    progression_links = topic_progression.create_progression_paths(papers, max_paths_per_paper=4)
+                    links.extend(progression_links[:max_links])
+                    link_count += len(progression_links)
+                else:
+                    # For large datasets, skip expensive topic progression
+                    progression_links = []
                 
                 # Track which pairs already have progression links
                 progression_pairs = set()
@@ -377,10 +437,17 @@ async def get_papers_graph(
                                 domain_groups[domain].append(paper.id)
                 
                 # Connect papers in same domain (if no progression link exists)
+                # Limit connections per domain to avoid explosion
                 for domain, paper_ids in domain_groups.items():
-                    if len(paper_ids) > 1:
-                        for i, pid1 in enumerate(paper_ids):
+                    if len(paper_ids) > 1 and link_count < max_links:
+                        # Limit to connecting each paper to max 5 others in same domain
+                        for i, pid1 in enumerate(paper_ids[:100]):  # Limit domain size
+                            if link_count >= max_links:
+                                break
+                            connected = 0
                             for pid2 in paper_ids[i+1:]:
+                                if connected >= 5 or link_count >= max_links:
+                                    break
                                 pair_key = tuple(sorted([pid1, pid2]))
                                 if pair_key not in progression_pairs and pid1 in paper_map and pid2 in paper_map:
                                     if not any((l["source"] == pid1 and l["target"] == pid2) or 
@@ -391,30 +458,38 @@ async def get_papers_graph(
                                             "value": 1,
                                             "type": "domain"
                                         })
+                                        link_count += 1
+                                        connected += 1
                 
-                # 3. Venue-based links (for additional context)
-                venue_groups = {}
-                for paper in papers:
-                    if paper.venue:
-                        if paper.venue not in venue_groups:
-                            venue_groups[paper.venue] = []
-                        venue_groups[paper.venue].append(paper.id)
-                
-                # Connect papers from same venue (if no other link exists)
-                for venue, paper_ids in venue_groups.items():
-                    if len(paper_ids) > 1:
-                        for i, pid1 in enumerate(paper_ids):
-                            for pid2 in paper_ids[i+1:]:
-                                pair_key = tuple(sorted([pid1, pid2]))
-                                if pair_key not in progression_pairs and pid1 in paper_map and pid2 in paper_map:
-                                    if not any((l["source"] == pid1 and l["target"] == pid2) or 
-                                              (l["source"] == pid2 and l["target"] == pid1) for l in links):
-                                        links.append({
-                                            "source": int(pid1),
-                                            "target": int(pid2),
-                                            "value": 0.5,
-                                            "type": "venue"
-                                        })
+                # 3. Venue-based links (for additional context) - skip for very large datasets
+                if len(papers) <= 1000:
+                    venue_groups = {}
+                    for paper in papers:
+                        if paper.venue:
+                            if paper.venue not in venue_groups:
+                                venue_groups[paper.venue] = []
+                            venue_groups[paper.venue].append(paper.id)
+                    
+                    # Connect papers from same venue (if no other link exists)
+                    for venue, paper_ids in venue_groups.items():
+                        if len(paper_ids) > 1 and link_count < max_links:
+                            for i, pid1 in enumerate(paper_ids[:50]):  # Limit venue size
+                                if link_count >= max_links:
+                                    break
+                                for pid2 in paper_ids[i+1:i+6]:  # Max 5 connections per paper
+                                    if link_count >= max_links:
+                                        break
+                                    pair_key = tuple(sorted([pid1, pid2]))
+                                    if pair_key not in progression_pairs and pid1 in paper_map and pid2 in paper_map:
+                                        if not any((l["source"] == pid1 and l["target"] == pid2) or 
+                                                  (l["source"] == pid2 and l["target"] == pid1) for l in links):
+                                            links.append({
+                                                "source": int(pid1),
+                                                "target": int(pid2),
+                                                "value": 0.5,
+                                                "type": "venue"
+                                            })
+                                            link_count += 1
             except Exception as e:
                 print(f"Error creating links: {e}")
                 import traceback

@@ -90,7 +90,7 @@ const CosmicBackground = () => {
   return (
     <canvas
       ref={canvasRef}
-      className="fixed inset-0 pointer-events-none"
+      className="fixed inset-0 pointer-events-none z-0"
       style={{ background: 'linear-gradient(135deg, #030712 0%, #0c1222 50%, #0f172a 100%)' }}
     />
   )
@@ -197,9 +197,29 @@ const PaperMap = () => {
     return () => clearInterval(interval)
   }, [])
 
+  const fetchGraphData = useCallback(async (search = '') => {
+    try {
+      setLoading(true)
+      const searchArxiv = search.length > 0
+      const response = await papersAPI.getGraph(search, user?.id, searchArxiv)
+      setGraphData(response.data)
+    } catch (err) {
+      console.error('Error fetching graph data:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
+
   useEffect(() => {
     fetchGraphData()
-  }, [user])
+  }, [fetchGraphData])
+
+  // Cleanup cursor on unmount
+  useEffect(() => {
+    return () => {
+      document.body.style.cursor = ''
+    }
+  }, [])
 
   // Real-time filtering as you type
   useEffect(() => {
@@ -217,19 +237,6 @@ const PaperMap = () => {
       setMatchingNodes(new Set())
     }
   }, [searchQuery, graphData])
-
-  const fetchGraphData = async (search = '') => {
-    try {
-      setLoading(true)
-      const searchArxiv = search.length > 0
-      const response = await papersAPI.getGraph(search, user?.id, searchArxiv)
-      setGraphData(response.data)
-    } catch (err) {
-      console.error('Error fetching graph data:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleSearch = (e) => {
     e.preventDefault()
@@ -251,6 +258,20 @@ const PaperMap = () => {
     }
   }, [])
 
+  // Helper function to convert hex to rgba
+  const hexToRgba = useCallback((hex, alpha = 1) => {
+    // Remove # if present
+    const cleanHex = hex.replace('#', '')
+    // Parse hex values
+    const r = parseInt(cleanHex.substring(0, 2), 16)
+    const g = parseInt(cleanHex.substring(2, 4), 16)
+    const b = parseInt(cleanHex.substring(4, 6), 16)
+    if (isNaN(r) || isNaN(g) || isNaN(b)) {
+      return `rgba(99, 102, 241, ${alpha})` // Fallback to indigo
+    }
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  }, [])
+
   // Determine node state for rendering
   const getNodeState = useCallback((node) => {
     const isSelected = selectedNode?.id === node.id
@@ -268,6 +289,12 @@ const PaperMap = () => {
 
   // Custom node painting with orb-like glowing effect
   const nodePaint = useCallback((node, ctx, globalScale) => {
+    // Validate node coordinates are finite numbers
+    if (!node || typeof node.x !== 'number' || typeof node.y !== 'number' || 
+        !isFinite(node.x) || !isFinite(node.y)) {
+      return // Skip rendering if coordinates are invalid
+    }
+
     const state = getNodeState(node)
     const baseSize = 6
 
@@ -307,61 +334,90 @@ const PaperMap = () => {
     }
 
     // Pulsing effect for active nodes
-    const pulse = state !== 'dimmed' ? 1 + 0.15 * Math.sin(time + node.id * 0.5) : 1
+    const pulse = state !== 'dimmed' ? 1 + 0.15 * Math.sin(time + (node.id || 0) * 0.5) : 1
     const finalSize = size * pulse
+
+    // Validate finalSize is finite
+    if (!isFinite(finalSize) || finalSize <= 0) {
+      return
+    }
 
     ctx.save()
     ctx.globalAlpha = opacity
 
     // Outer glow (largest, most diffuse)
     if (state !== 'dimmed') {
-      const gradient3 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, finalSize * 4)
-      gradient3.addColorStop(0, glowColor)
-      gradient3.addColorStop(0.5, glowColor.replace(/[\d.]+\)$/, '0.2)'))
-      gradient3.addColorStop(1, 'transparent')
-      ctx.beginPath()
-      ctx.arc(node.x, node.y, finalSize * 4, 0, 2 * Math.PI)
-      ctx.fillStyle = gradient3
-      ctx.fill()
+      const outerRadius = finalSize * 4
+      if (isFinite(outerRadius) && outerRadius > 0) {
+        const gradient3 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, outerRadius)
+        gradient3.addColorStop(0, glowColor)
+        // Extract rgba values and reduce opacity to 0.2
+        const rgbaMatch = glowColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/)
+        if (rgbaMatch) {
+          const r = rgbaMatch[1]
+          const g = rgbaMatch[2]
+          const b = rgbaMatch[3]
+          gradient3.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, 0.2)`)
+        } else {
+          gradient3.addColorStop(0.5, glowColor)
+        }
+        gradient3.addColorStop(1, 'transparent')
+        ctx.beginPath()
+        ctx.arc(node.x, node.y, outerRadius, 0, 2 * Math.PI)
+        ctx.fillStyle = gradient3
+        ctx.fill()
+      }
     }
 
     // Middle glow
     if (state !== 'dimmed') {
-      const gradient2 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, finalSize * 2)
-      gradient2.addColorStop(0, glowColor)
-      gradient2.addColorStop(1, 'transparent')
-      ctx.beginPath()
-      ctx.arc(node.x, node.y, finalSize * 2, 0, 2 * Math.PI)
-      ctx.fillStyle = gradient2
-      ctx.fill()
+      const middleRadius = finalSize * 2
+      if (isFinite(middleRadius) && middleRadius > 0) {
+        const gradient2 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, middleRadius)
+        gradient2.addColorStop(0, glowColor)
+        gradient2.addColorStop(1, 'transparent')
+        ctx.beginPath()
+        ctx.arc(node.x, node.y, middleRadius, 0, 2 * Math.PI)
+        ctx.fillStyle = gradient2
+        ctx.fill()
+      }
     }
 
     // Core orb with gradient
-    const coreGradient = ctx.createRadialGradient(
-      node.x - finalSize * 0.3,
-      node.y - finalSize * 0.3,
-      0,
-      node.x,
-      node.y,
-      finalSize
-    )
-    coreGradient.addColorStop(0, '#ffffff')
-    coreGradient.addColorStop(0.3, coreColor)
-    coreGradient.addColorStop(1, coreColor.replace(/^#/, 'rgba(').replace(/(.{2})(.{2})(.{2})/, (_, r, g, b) =>
-      `${parseInt(r, 16)}, ${parseInt(g, 16)}, ${parseInt(b, 16)}, 0.8)`
-    ))
+    const offsetX = node.x - finalSize * 0.3
+    const offsetY = node.y - finalSize * 0.3
+    if (isFinite(offsetX) && isFinite(offsetY) && isFinite(finalSize)) {
+      const coreGradient = ctx.createRadialGradient(
+        offsetX,
+        offsetY,
+        0,
+        node.x,
+        node.y,
+        finalSize
+      )
+      coreGradient.addColorStop(0, '#ffffff')
+      coreGradient.addColorStop(0.3, coreColor)
+      // Convert hex to rgba for the final color stop
+      const finalColor = hexToRgba(coreColor, 0.8)
+      coreGradient.addColorStop(1, finalColor)
 
-    ctx.beginPath()
-    ctx.arc(node.x, node.y, finalSize, 0, 2 * Math.PI)
-    ctx.fillStyle = coreGradient
-    ctx.fill()
-
-    // Inner highlight for 3D effect
-    if (state !== 'dimmed') {
       ctx.beginPath()
-      ctx.arc(node.x - finalSize * 0.25, node.y - finalSize * 0.25, finalSize * 0.3, 0, 2 * Math.PI)
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+      ctx.arc(node.x, node.y, finalSize, 0, 2 * Math.PI)
+      ctx.fillStyle = coreGradient
       ctx.fill()
+
+      // Inner highlight for 3D effect
+      if (state !== 'dimmed') {
+        const highlightX = node.x - finalSize * 0.25
+        const highlightY = node.y - finalSize * 0.25
+        const highlightSize = finalSize * 0.3
+        if (isFinite(highlightX) && isFinite(highlightY) && isFinite(highlightSize)) {
+          ctx.beginPath()
+          ctx.arc(highlightX, highlightY, highlightSize, 0, 2 * Math.PI)
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+          ctx.fill()
+        }
+      }
     }
 
     ctx.restore()
@@ -383,7 +439,7 @@ const PaperMap = () => {
       ctx.fillText(node.label, node.x, node.y + finalSize + 8 / globalScale)
       ctx.restore()
     }
-  }, [getNodeState, time])
+  }, [getNodeState, time, hexToRgba])
 
   // Link styling
   const getLinkColor = useCallback((link) => {
@@ -432,14 +488,14 @@ const PaperMap = () => {
       <CosmicBackground />
 
       {/* Ambient gradient overlays */}
-      <div className="absolute inset-0 pointer-events-none">
+      <div className="absolute inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '4s' }} />
         <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-cyan-600/15 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s', animationDelay: '2s' }} />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-3xl" />
       </div>
 
       {/* Header - floating glass style */}
-      <div className="absolute top-0 left-0 right-0 z-20 p-4">
+      <div className="absolute top-0 left-0 right-0 z-30 p-4 pointer-events-auto">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -516,8 +572,16 @@ const PaperMap = () => {
       </div>
 
       {/* Main graph */}
+      <div 
+        className="absolute inset-0 z-10"
+        style={{ 
+          cursor: 'grab',
+          userSelect: 'none',
+          WebkitUserSelect: 'none'
+        }}
+      >
       {loading ? (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="text-center">
             <div className="relative w-20 h-20 mx-auto mb-4">
               <div className="absolute inset-0 rounded-full border-2 border-indigo-500/30 animate-ping" />
@@ -534,8 +598,12 @@ const PaperMap = () => {
           backgroundColor="transparent"
           nodeCanvasObject={nodePaint}
           nodePointerAreaPaint={(node, color, ctx) => {
+            if (!node || typeof node.x !== 'number' || typeof node.y !== 'number' || 
+                !isFinite(node.x) || !isFinite(node.y)) {
+              return
+            }
             ctx.beginPath()
-            ctx.arc(node.x, node.y, 15, 0, 2 * Math.PI)
+            ctx.arc(node.x, node.y, 25, 0, 2 * Math.PI)
             ctx.fillStyle = color
             ctx.fill()
           }}
@@ -544,12 +612,28 @@ const PaperMap = () => {
           linkDirectionalArrowLength={0}
           linkCurvature={0.15}
           onNodeClick={handleNodeClick}
-          onNodeHover={setHoveredNode}
+          onNodeHover={(node) => {
+            setHoveredNode(node)
+            if (node) {
+              document.body.style.cursor = 'pointer'
+            } else {
+              document.body.style.cursor = 'grab'
+            }
+          }}
           onBackgroundClick={handleBackgroundClick}
-          cooldownTicks={200}
-          d3AlphaDecay={0.02}
-          d3VelocityDecay={0.3}
-          warmupTicks={100}
+          onNodeDrag={handleNodeClick}
+          onNodeDragEnd={() => {
+            document.body.style.cursor = 'grab'
+          }}
+          enablePanInteraction={true}
+          enableZoomInteraction={true}
+          enableNodeDrag={true}
+          cooldownTicks={300}
+          d3AlphaDecay={0.022}
+          d3VelocityDecay={0.4}
+          warmupTicks={150}
+          minZoom={0.05}
+          maxZoom={10}
           onEngineStop={() => {
             if (fgRef.current && graphData.nodes.length > 0) {
               fgRef.current.zoomToFit(500, 80)
@@ -557,6 +641,7 @@ const PaperMap = () => {
           }}
         />
       )}
+      </div>
 
       {/* Selected paper card */}
       <AnimatePresence>

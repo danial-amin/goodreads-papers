@@ -25,7 +25,7 @@ export const papersAPI = {
   update: (id, data) => api.put(`/api/papers/${id}`, data),
   delete: (id) => api.delete(`/api/papers/${id}`),
   getSimilar: (id, limit = 5) => api.get(`/api/papers/${id}/similar`, { params: { limit } }),
-  getGraph: (search = '', userId = null, searchArxiv = false) => api.get('/api/papers/graph', { params: { search, limit: 50, user_id: userId, search_arxiv: searchArxiv } }),
+  getGraph: (search = '', userId = null, searchArxiv = false) => api.get('/api/papers/graph', { params: { search, limit: 2000, user_id: userId, search_arxiv: searchArxiv } }),
   fetchExternal: (data) => api.post('/api/papers/fetch', data),
   uploadBibTeX: (bibtexContent) => api.post('/api/papers/upload-bibtex', { bibtex_content: bibtexContent }),
 }
