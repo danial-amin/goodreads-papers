@@ -17,6 +17,7 @@ A modern, sleek Goodreads alternative for research papers with intelligent recom
 ### Backend
 - **FastAPI**: Modern, fast Python web framework
 - **SQLAlchemy**: ORM for database operations
+- **PostgreSQL**: Production database (SQLite for local dev)
 - **scikit-learn**: Machine learning for recommendations
 - **sentence-transformers**: Text similarity calculations
 
@@ -42,15 +43,70 @@ git clone <repository-url>
 cd goodreads-papers
 ```
 
-2. Start the services:
+2. (Optional) Create a `.env` file to customize database credentials:
+```bash
+POSTGRES_USER=paperreads
+POSTGRES_PASSWORD=your_secure_password
+POSTGRES_DB=paperreads
+```
+
+3. Start the services:
 ```bash
 docker-compose up --build
 ```
 
-3. Access the application:
+4. Access the application:
    - Frontend: http://localhost:5173
    - Backend API: http://localhost:8000
    - API Docs: http://localhost:8000/docs
+   - Database: localhost:5432 (PostgreSQL)
+
+### Database Service
+
+The application uses PostgreSQL as an isolated service with persistent storage:
+
+- **Database Service**: Runs in a separate container with its own volume
+- **Data Persistence**: Database data persists across container restarts via Docker volumes
+- **Health Checks**: Backend waits for database to be ready before starting
+- **CI/CD Ready**: Database credentials can be overridden via environment variables
+
+#### Database Configuration
+
+The database service is configured in `docker-compose.yml` and supports environment variable overrides:
+
+```bash
+# Default values (can be overridden)
+POSTGRES_USER=paperreads
+POSTGRES_PASSWORD=paperreads_password
+POSTGRES_DB=paperreads
+POSTGRES_PORT=5432
+```
+
+For CI/CD, you can override these values:
+```bash
+export POSTGRES_USER=ci_user
+export POSTGRES_PASSWORD=ci_password
+export POSTGRES_DB=ci_paperreads
+docker-compose up -d database  # Start only database
+docker-compose up -d backend frontend  # Start app services
+```
+
+#### Database Persistence
+
+The database uses a named Docker volume (`database-data`) that persists data across:
+- Container restarts
+- Service updates
+- CI/CD pipeline runs (when volume is preserved)
+
+To backup the database:
+```bash
+docker exec paperreads-database pg_dump -U paperreads paperreads > backup.sql
+```
+
+To restore:
+```bash
+docker exec -i paperreads-database psql -U paperreads paperreads < backup.sql
+```
 
 ### Local Development
 

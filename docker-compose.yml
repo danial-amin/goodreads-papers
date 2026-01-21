@@ -1,5 +1,26 @@
 
 services:
+  database:
+    image: postgres:15-alpine
+    container_name: paperreads-database
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-paperreads}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-paperreads_password}
+      - POSTGRES_DB=${POSTGRES_DB:-paperreads}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - database-data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - paperreads-network
+
   backend:
     build:
       context: ./backend
@@ -11,7 +32,10 @@ services:
       - ./backend:/app
       - backend-data:/app/data
     environment:
-      - DATABASE_URL=sqlite:///./data/paperreads.db
+      - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-paperreads}:${POSTGRES_PASSWORD:-paperreads_password}@database:5432/${POSTGRES_DB:-paperreads}}
+    depends_on:
+      database:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - paperreads-network
@@ -36,6 +60,7 @@ services:
 
 volumes:
   backend-data:
+  database-data:
 
 networks:
   paperreads-network:
