@@ -65,4 +65,15 @@ export const understandingAPI = {
   getLevels: () => api.get('/api/understanding-levels'),
 }
 
+export const readingListsAPI = {
+  create: (data) => api.post('/api/reading-lists', data),
+  getUserLists: (userId) => api.get(`/api/users/${userId}/reading-lists`),
+  getList: (listId) => api.get(`/api/reading-lists/${listId}`),
+  update: (listId, data) => api.put(`/api/reading-lists/${listId}`, data),
+  delete: (listId) => api.delete(`/api/reading-lists/${listId}`),
+  addPaper: (listId, paperId) => api.post(`/api/reading-lists/${listId}/papers`, { paper_id: paperId }),
+  removePaper: (listId, paperId) => api.delete(`/api/reading-lists/${listId}/papers/${paperId}`),
+  initializeDefaults: (userId) => api.post(`/api/users/${userId}/reading-lists/initialize-defaults`),
+}
+
 export default api

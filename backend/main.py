@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 
 from database import SessionLocal, engine, Base
-from models import Paper, User, UserPaperInteraction
+from models import Paper, User, UserPaperInteraction, ReadingList
 from schemas import (
     PaperCreate, PaperResponse, PaperUpdate,
     UserCreate, UserResponse,
@@ -16,7 +16,9 @@ from schemas import (
     SignupStep1, SignupStep2, SignupStep3, GuestInteractionCreate,
     PaperURLUpdate,
     OnboardingData, OnboardingResponse,
-    ReadingHabitsResponse, ExploreExploitResponse, DomainExpertiseResponse
+    ReadingHabitsResponse, ExploreExploitResponse, DomainExpertiseResponse,
+    ReadingListCreate, ReadingListUpdate, ReadingListResponse, ReadingListWithPapers,
+    AddPaperToListRequest, RemovePaperFromListRequest
 )
 from models import InteractionStatus
 from recommendation_engine import RecommendationEngine
@@ -62,6 +64,13 @@ try:
     migrate_v3()
 except Exception as e:
     print(f"Migration v3 note: {e}")
+
+# Run v4 migration for reading lists
+try:
+    from migrate_v4 import migrate_v4
+    migrate_v4()
+except Exception as e:
+    print(f"Migration v4 note: {e}")
 
 app = FastAPI(
     title="PaperReads API",
@@ -1215,6 +1224,236 @@ async def get_understanding_levels():
             }
         ]
     }
+
+
+# Reading List endpoints
+@app.post("/api/reading-lists", response_model=ReadingListResponse, status_code=status.HTTP_201_CREATED)
+async def create_reading_list(
+    reading_list: ReadingListCreate,
+    db: Session = Depends(get_db)
+):
+    """Create a new reading list"""
+    # Check if user exists
+    user = db.query(User).filter(User.id == reading_list.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    db_list = ReadingList(**reading_list.model_dump())
+    db.add(db_list)
+    db.commit()
+    db.refresh(db_list)
+    
+    # Set paper_count to 0 for new list
+    response = ReadingListResponse.model_validate(db_list)
+    response.paper_count = 0
+    return response
+
+
+@app.get("/api/users/{user_id}/reading-lists", response_model=List[ReadingListResponse])
+async def get_user_reading_lists(
+    user_id: int,
+    include_public: bool = True,
+    db: Session = Depends(get_db)
+):
+    """Get all reading lists for a user"""
+    query = db.query(ReadingList).filter(ReadingList.user_id == user_id)
+    
+    if not include_public:
+        # Only return user's own lists
+        pass
+    else:
+        # Return user's lists (both public and private for owner)
+        pass
+    
+    lists = query.order_by(ReadingList.is_default.desc(), ReadingList.created_at.desc()).all()
+    
+    result = []
+    for list_item in lists:
+        list_response = ReadingListResponse.model_validate(list_item)
+        list_response.paper_count = len(list_item.papers)
+        result.append(list_response)
+    
+    return result
+
+
+@app.get("/api/reading-lists/{list_id}", response_model=ReadingListWithPapers)
+async def get_reading_list(
+    list_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get a reading list with its papers"""
+    reading_list = db.query(ReadingList).filter(ReadingList.id == list_id).first()
+    if not reading_list:
+        raise HTTPException(status_code=404, detail="Reading list not found")
+    
+    result = ReadingListWithPapers.model_validate(reading_list)
+    result.papers = [PaperResponse.model_validate(paper) for paper in reading_list.papers]
+    return result
+
+
+@app.put("/api/reading-lists/{list_id}", response_model=ReadingListResponse)
+async def update_reading_list(
+    list_id: int,
+    reading_list_update: ReadingListUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update a reading list"""
+    reading_list = db.query(ReadingList).filter(ReadingList.id == list_id).first()
+    if not reading_list:
+        raise HTTPException(status_code=404, detail="Reading list not found")
+    
+    # Don't allow updating default lists' name or is_default
+    if reading_list.is_default:
+        if reading_list_update.name is not None:
+            raise HTTPException(status_code=400, detail="Cannot rename default lists")
+        if reading_list_update.is_public is not None and not reading_list.is_public:
+            raise HTTPException(status_code=400, detail="Default lists must be public")
+    
+    update_data = reading_list_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(reading_list, field, value)
+    
+    db.commit()
+    db.refresh(reading_list)
+    
+    result = ReadingListResponse.model_validate(reading_list)
+    result.paper_count = len(reading_list.papers)
+    return result
+
+
+@app.delete("/api/reading-lists/{list_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_reading_list(
+    list_id: int,
+    db: Session = Depends(get_db)
+):
+    """Delete a reading list"""
+    reading_list = db.query(ReadingList).filter(ReadingList.id == list_id).first()
+    if not reading_list:
+        raise HTTPException(status_code=404, detail="Reading list not found")
+    
+    if reading_list.is_default:
+        raise HTTPException(status_code=400, detail="Cannot delete default lists")
+    
+    db.delete(reading_list)
+    db.commit()
+    return None
+
+
+@app.post("/api/reading-lists/{list_id}/papers", response_model=ReadingListResponse)
+async def add_paper_to_list(
+    list_id: int,
+    request: AddPaperToListRequest,
+    db: Session = Depends(get_db)
+):
+    """Add a paper to a reading list"""
+    reading_list = db.query(ReadingList).filter(ReadingList.id == list_id).first()
+    if not reading_list:
+        raise HTTPException(status_code=404, detail="Reading list not found")
+    
+    paper = db.query(Paper).filter(Paper.id == request.paper_id).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    
+    # Check if paper is already in the list
+    if paper in reading_list.papers:
+        result = ReadingListResponse.model_validate(reading_list)
+        result.paper_count = len(reading_list.papers)
+        return result
+    
+    reading_list.papers.append(paper)
+    db.commit()
+    db.refresh(reading_list)
+    
+    result = ReadingListResponse.model_validate(reading_list)
+    result.paper_count = len(reading_list.papers)
+    return result
+
+
+@app.delete("/api/reading-lists/{list_id}/papers/{paper_id}", response_model=ReadingListResponse)
+async def remove_paper_from_list(
+    list_id: int,
+    paper_id: int,
+    db: Session = Depends(get_db)
+):
+    """Remove a paper from a reading list"""
+    reading_list = db.query(ReadingList).filter(ReadingList.id == list_id).first()
+    if not reading_list:
+        raise HTTPException(status_code=404, detail="Reading list not found")
+    
+    paper = db.query(Paper).filter(Paper.id == paper_id).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    
+    if paper not in reading_list.papers:
+        raise HTTPException(status_code=400, detail="Paper is not in this list")
+    
+    reading_list.papers.remove(paper)
+    db.commit()
+    db.refresh(reading_list)
+    
+    result = ReadingListResponse.model_validate(reading_list)
+    result.paper_count = len(reading_list.papers)
+    return result
+
+
+@app.post("/api/users/{user_id}/reading-lists/initialize-defaults", response_model=List[ReadingListResponse])
+async def initialize_default_reading_lists(
+    user_id: int,
+    db: Session = Depends(get_db)
+):
+    """Initialize default reading lists for a user (Want to Read, Currently Reading, Read, Favorites)"""
+    # Check if user exists
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if default lists already exist
+    existing_defaults = db.query(ReadingList).filter(
+        ReadingList.user_id == user_id,
+        ReadingList.is_default == True
+    ).all()
+    
+    if existing_defaults:
+        # Return existing lists
+        result = []
+        for list_item in existing_defaults:
+            list_response = ReadingListResponse.model_validate(list_item)
+            list_response.paper_count = len(list_item.papers)
+            result.append(list_response)
+        return result
+    
+    # Create default lists
+    default_lists = [
+        {"name": "Want to Read", "default_type": "want_to_read", "description": "Papers I want to read"},
+        {"name": "Currently Reading", "default_type": "currently_reading", "description": "Papers I'm currently reading"},
+        {"name": "Read", "default_type": "read", "description": "Papers I've read"},
+        {"name": "Favorites", "default_type": "favorites", "description": "My favorite papers"},
+    ]
+    
+    created_lists = []
+    for list_data in default_lists:
+        db_list = ReadingList(
+            user_id=user_id,
+            name=list_data["name"],
+            description=list_data["description"],
+            is_default=True,
+            is_public=True,
+            default_type=list_data["default_type"]
+        )
+        db.add(db_list)
+        created_lists.append(db_list)
+    
+    db.commit()
+    
+    # Refresh and return
+    result = []
+    for list_item in created_lists:
+        db.refresh(list_item)
+        list_response = ReadingListResponse.model_validate(list_item)
+        list_response.paper_count = 0
+        result.append(list_response)
+    
+    return result
 
 
 if __name__ == "__main__":

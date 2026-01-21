@@ -1,8 +1,16 @@
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, Enum, Boolean
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, Enum, Boolean, Table
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 from database import Base
+
+# Association table for many-to-many relationship between papers and reading lists
+reading_list_papers = Table(
+    'reading_list_papers',
+    Base.metadata,
+    Column('reading_list_id', Integer, ForeignKey('reading_lists.id'), primary_key=True),
+    Column('paper_id', Integer, ForeignKey('papers.id'), primary_key=True)
+)
 
 
 class UserType(str, enum.Enum):
@@ -53,6 +61,7 @@ class Paper(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     interactions = relationship("UserPaperInteraction", back_populates="paper")
+    reading_lists = relationship("ReadingList", secondary=reading_list_papers, back_populates="papers")
 
 class User(Base):
     __tablename__ = "users"
@@ -81,6 +90,7 @@ class User(Base):
     last_reading_week = Column(String)  # ISO week format: "2024-W01"
 
     interactions = relationship("UserPaperInteraction", back_populates="user")
+    reading_lists = relationship("ReadingList", back_populates="user")
 
 class UserPaperInteraction(Base):
     __tablename__ = "user_paper_interactions"
@@ -100,3 +110,20 @@ class UserPaperInteraction(Base):
     
     user = relationship("User", back_populates="interactions")
     paper = relationship("Paper", back_populates="interactions")
+
+
+class ReadingList(Base):
+    __tablename__ = "reading_lists"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text)
+    is_public = Column(Boolean, default=True)
+    is_default = Column(Boolean, default=False)  # True for "Want to Read", "Currently Reading", etc.
+    default_type = Column(String)  # "want_to_read", "currently_reading", "read", "favorites"
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    user = relationship("User", back_populates="reading_lists")
+    papers = relationship("Paper", secondary=reading_list_papers, back_populates="reading_lists")

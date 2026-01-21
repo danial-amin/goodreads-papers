@@ -247,3 +247,45 @@ class DomainExpertiseResponse(BaseModel):
     expertise_level: str  # "novice", "developing", "proficient", "expert"
     growth_areas: List[str]
     strong_areas: List[str]
+
+
+# Reading List schemas
+class ReadingListBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    is_public: bool = True
+    is_default: bool = False
+    default_type: Optional[str] = None  # "want_to_read", "currently_reading", "read", "favorites"
+
+
+class ReadingListCreate(ReadingListBase):
+    user_id: int
+
+
+class ReadingListUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_public: Optional[bool] = None
+
+
+class ReadingListResponse(ReadingListBase):
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    paper_count: Optional[int] = 0  # Number of papers in the list
+    
+    class Config:
+        from_attributes = True
+
+
+class ReadingListWithPapers(ReadingListResponse):
+    papers: List[PaperResponse] = []
+
+
+class AddPaperToListRequest(BaseModel):
+    paper_id: int
+
+
+class RemovePaperFromListRequest(BaseModel):
+    paper_id: int

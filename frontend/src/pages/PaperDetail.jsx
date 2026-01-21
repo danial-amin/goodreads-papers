@@ -5,6 +5,7 @@ import { papersAPI, interactionsAPI } from '../services/api'
 import { useUser } from '../context/UserContext'
 import PaperCard from '../components/PaperCard'
 import PaperReflectionModal from '../components/PaperReflectionModal'
+import ReadingLists from '../components/ReadingLists'
 import {
   Calendar,
   Users,
@@ -203,46 +204,52 @@ const PaperDetail = () => {
           {currentUser && (
             <div className="mt-8 pt-8 border-t border-gray-200">
               <h3 className="text-xl font-bold text-gray-900 mb-4">Track This Paper</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Status
-                  </label>
-                  <select
-                    value={status}
-                    onChange={(e) => handleStatusChange(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="want_to_read">Want to Read</option>
-                    <option value="reading">Reading</option>
-                    <option value="read">Read</option>
-                    <option value="favorite">Favorite</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Rating
-                  </label>
-                  <div className="flex space-x-2">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        type="button"
-                        onClick={() => setRating(star)}
-                        className={`${
-                          star <= rating
-                            ? 'text-yellow-400'
-                            : 'text-gray-300'
-                        } hover:text-yellow-400 transition-colors`}
-                      >
-                        <Star className="w-6 h-6 fill-current" />
-                      </button>
-                    ))}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Status
+                    </label>
+                    <select
+                      value={status}
+                      onChange={(e) => handleStatusChange(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="want_to_read">Want to Read</option>
+                      <option value="reading">Reading</option>
+                      <option value="read">Read</option>
+                      <option value="favorite">Favorite</option>
+                    </select>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Rating
+                    </label>
+                    <div className="flex space-x-2">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setRating(star)}
+                          className={`${
+                            star <= rating
+                              ? 'text-yellow-400'
+                              : 'text-gray-300'
+                          } hover:text-yellow-400 transition-colors`}
+                        >
+                          <Star className="w-6 h-6 fill-current" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button onClick={() => handleInteraction()} className="btn-primary">
+                    Save
+                  </button>
                 </div>
-                <button onClick={() => handleInteraction()} className="btn-primary">
-                  Save
-                </button>
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Add to Reading List</h4>
+                  <ReadingLists selectedPaperId={parseInt(id)} />
+                </div>
               </div>
             </div>
           )}
