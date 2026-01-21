@@ -21,7 +21,7 @@ const Papers = () => {
   const fetchPapers = async (search = '') => {
     try {
       setLoading(true)
-      const params = search ? { search } : {}
+      const params = search ? { search, limit: 300 } : { limit: 300 }
       const response = await papersAPI.getAll(params)
       setPapers(response.data)
       setError(null)

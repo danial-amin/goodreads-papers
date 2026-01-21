@@ -175,7 +175,7 @@ async def create_paper(paper: PaperCreate, db: Session = Depends(get_db)):
 @app.get("/api/papers", response_model=List[PaperResponse])
 async def get_papers(
     skip: int = 0,
-    limit: int = 20,
+    limit: int = 300,  # Increased default to show more papers
     search: Optional[str] = None,
     search_arxiv: bool = False,
     db: Session = Depends(get_db)
