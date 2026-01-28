@@ -17,5 +17,5 @@ RUN npm run build
 # Expose port used by `vite preview`
 EXPOSE 4173
 
-# Run the production preview server, binding to Railway's PORT if set
-CMD ["sh", "-c", "npm run preview -- --host 0.0.0.0 --port ${PORT:-4173}"]
+# Run a simple static server instead of Vite preview to avoid host checking issues
+CMD ["sh", "-c", "npm run serve"]

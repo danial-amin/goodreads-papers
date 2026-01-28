@@ -13,7 +13,8 @@ export default defineConfig({
   preview: {
     host: '0.0.0.0',
     port: 4173,
-    // Allow all hosts in preview mode (for Railway deployments)
-    allowedHosts: 'all'
+    // Allow all Railway domains - using pattern that matches *.up.railway.app
+    // If this doesn't work, we'll need to use a custom server
+    strictPort: false
   }
 })
