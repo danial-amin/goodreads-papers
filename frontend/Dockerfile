@@ -1,18 +1,21 @@
-FROM node:20-alpine
+FROM node:20
 
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies (clean install for CI)
+RUN npm ci
 
 # Copy application code
 COPY . .
 
-# Expose port
-EXPOSE 5173
+# Build the app
+RUN npm run build
 
-# Run the development server
-CMD ["npm", "run", "dev", "--", "--host"]
+# Expose port used by `vite preview`
+EXPOSE 4173
+
+# Run the production preview server, binding to Railway's PORT if set
+CMD ["sh", "-c", "npm run preview -- --host 0.0.0.0 --port ${PORT:-4173}"]
