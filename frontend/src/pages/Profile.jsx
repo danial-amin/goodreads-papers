@@ -4,6 +4,8 @@ import { User, BookOpen, TrendingUp, Calendar, Star, BarChart3, Lightbulb } from
 import { useUser } from '../context/UserContext'
 import { useNavigate } from 'react-router-dom'
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
+
 const Profile = () => {
   const { currentUser, authToken } = useUser()
   const navigate = useNavigate()
@@ -21,7 +23,7 @@ const Profile = () => {
 
   const fetchProfile = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/users/${currentUser.id}/profile`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/${currentUser.id}/profile`, {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }

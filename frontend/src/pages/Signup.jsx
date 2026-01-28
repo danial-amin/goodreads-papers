@@ -4,6 +4,8 @@ import { motion } from 'framer-motion'
 import { UserPlus, Mail, Lock, User, ArrowRight, Sparkles } from 'lucide-react'
 import { useUser } from '../context/UserContext'
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
+
 const Signup = () => {
   const [formData, setFormData] = useState({
     username: '',
@@ -29,7 +31,7 @@ const Signup = () => {
     setLoading(true)
 
     try {
-      const response = await fetch('http://localhost:8000/api/auth/register', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -44,7 +46,7 @@ const Signup = () => {
       }
 
       // Auto-login after registration
-      const loginResponse = await fetch('http://localhost:8000/api/auth/login', {
+      const loginResponse = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

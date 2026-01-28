@@ -4,6 +4,8 @@ import { motion } from 'framer-motion'
 import { LogIn, Lock, User, ArrowRight, BookOpen } from 'lucide-react'
 import { useUser } from '../context/UserContext'
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
+
 const Login = () => {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -18,7 +20,7 @@ const Login = () => {
     setLoading(true)
 
     try {
-      const response = await fetch('http://localhost:8000/api/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
