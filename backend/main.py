@@ -79,9 +79,25 @@ app = FastAPI(
 )
 
 # CORS middleware
+def _parse_cors_origins(value: str | None) -> list[str]:
+    """
+    Parse comma-separated CORS origins from env var.
+
+    Example:
+      CORS_ORIGINS="https://frontend.up.railway.app,http://localhost:5173"
+    """
+    if not value:
+        return []
+    return [o.strip().rstrip("/") for o in value.split(",") if o.strip()]
+
+
+default_origins = ["http://localhost:3000", "http://localhost:5173"]
+env_origins = _parse_cors_origins(os.getenv("CORS_ORIGINS"))
+cors_origins = list(dict.fromkeys(default_origins + env_origins))  # de-dupe, keep order
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
