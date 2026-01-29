@@ -1,0 +1,12 @@
+# Railway frontend service (root is 'frontend')
+# Build: Dockerfile in this directory.
+# Set VITE_API_URL in Railway Variables (dashboard) so it is baked into the frontend at build time.
+#
+# If you changed VITE_API_URL but the app still uses the old URL:
+# 1. Redeploy with cache cleared: Dashboard → your frontend service → Deployments → ⋮ → Redeploy → enable "Clear build cache"
+#    Or set variable NO_CACHE=1 and redeploy, or run: railway redeploy --force
+# 2. After a clean build, logs will show: "==> VITE_API_URL (build-time, will be baked into frontend): '...'"
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"

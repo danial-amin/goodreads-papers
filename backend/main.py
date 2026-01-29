@@ -95,9 +95,14 @@ default_origins = ["http://localhost:3000", "http://localhost:5173"]
 env_origins = _parse_cors_origins(os.getenv("CORS_ORIGINS"))
 cors_origins = list(dict.fromkeys(default_origins + env_origins))  # de-dupe, keep order
 
+# Allow all Railway frontend deployments (e.g. https://frontend-production-239d.up.railway.app)
+# so you don't have to set CORS_ORIGINS for each new deploy URL.
+cors_origin_regex = r"^https://[a-z0-9-]+\.up\.railway\.app$"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_origin_regex=cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

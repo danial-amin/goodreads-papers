@@ -71,6 +71,7 @@ class ReadingHabitsTracker:
         )
 
         if papers_this_week > 0:
+            current = (user.current_streak or 0) + 0  # normalize None to int
             if user.last_reading_week == current_week:
                 # Already counted this week
                 pass
@@ -80,17 +81,15 @@ class ReadingHabitsTracker:
                 expected_next = cls.get_iso_week(last_week_dt + timedelta(weeks=1))
 
                 if current_week == expected_next:
-                    # Consecutive week!
-                    user.current_streak += 1
+                    current = (user.current_streak or 0) + 1
                 else:
-                    # Streak broken, start new
-                    user.current_streak = 1
+                    current = 1
             else:
-                # First week ever
-                user.current_streak = 1
+                current = 1
 
+            user.current_streak = current
             user.last_reading_week = current_week
-            user.longest_streak = max(user.longest_streak or 0, user.current_streak or 0)
+            user.longest_streak = max(user.longest_streak or 0, current)
 
         db.commit()
 
