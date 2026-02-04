@@ -85,6 +85,7 @@ def _parse_cors_origins(value: str | None) -> list[str]:
 
     Example:
       CORS_ORIGINS="https://frontend.up.railway.app,http://localhost:5173"
+      CORS_ORIGIN="https://my-app.vercel.app"   (single origin, also supported)
     """
     if not value:
         return []
@@ -92,12 +93,26 @@ def _parse_cors_origins(value: str | None) -> list[str]:
 
 
 default_origins = ["http://localhost:3000", "http://localhost:5173"]
+# Support both CORS_ORIGINS (comma-separated) and CORS_ORIGIN (single URL)
 env_origins = _parse_cors_origins(os.getenv("CORS_ORIGINS"))
+_single = os.getenv("CORS_ORIGIN")
+if _single:
+    env_origins = env_origins + _parse_cors_origins(_single)
 cors_origins = list(dict.fromkeys(default_origins + env_origins))  # de-dupe, keep order
 
-# Allow all Railway frontend deployments (e.g. https://frontend-production-239d.up.railway.app)
-# so you don't have to set CORS_ORIGINS for each new deploy URL.
-cors_origin_regex = r"^https://[a-z0-9-]+\.up\.railway\.app$"
+# Allow Railway frontend deployments (subdomains can have uppercase, e.g. MyApp-production-xxx)
+cors_origin_regex = r"^https://[a-zA-Z0-9_.-]+\.up\.railway\.app$"
+# Optional extra regex from env (e.g. for Vercel: ^https://[a-z0-9-]+\.vercel\.app$)
+_cors_regex_env = os.getenv("CORS_ORIGIN_REGEX")
+if _cors_regex_env:
+    # CORSMiddleware accepts one regex; combine with alternation if both needed
+    cors_origin_regex = f"(?:{cors_origin_regex})|(?:{_cors_regex_env})"
+
+if os.getenv("CORS_DEBUG"):
+    import logging
+    logging.getLogger("uvicorn.error").info(
+        "CORS allow_origins=%s allow_origin_regex=%s", cors_origins, cors_origin_regex
+    )
 
 app.add_middleware(
     CORSMiddleware,
